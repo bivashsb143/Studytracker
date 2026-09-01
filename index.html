@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Study Wake-Up Monitor</title>
+    <!-- PWA Manifest Link -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
+            50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.9); }
+        }
+        .alarm-pulse {
+            animation: pulse-glow 1s infinite ease-in-out;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-slate-100 min-h-screen flex flex-col justify-between font-sans select-none overflow-x-hidden">
+
+    <!-- Top Safe Area Header -->
+    <header class="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-5 py-4 sticky top-0 z-50 flex items-center justify-between shadow-md">
+        <div>
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <span class="inline-block w-3 h-3 rounded-full bg-emerald-500" id="header-dot"></span>
+                Study Wake-Up Monitor
+            </h1>
+            <p class="text-xs text-slate-400">PWA Standalone Lock-Screen Monitor</p>
+        </div>
+        <button id="install-btn" class="hidden bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-colors">
+            Install App
+        </button>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-md w-full mx-auto px-4 py-6 flex flex-col gap-6 justify-start">
+
+        <!-- Status Card -->
+        <div id="status-card" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl transition-all duration-300">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">System Status</span>
+                <div id="status-indicator-badge" class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-medium">
+                    <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                    <span id="status-text">READY</span>
+                </div>
+            </div>
+            <p id="status-description" class="text-sm text-slate-300 font-medium">
+                Arm monitor. If your screen locks or goes off, the alarm will sound after your set duration!
+            </p>
+        </div>
+
+        <!-- Timer / Alarm Screen Container -->
+        <div id="display-container" class="flex flex-col gap-6">
+            
+            <!-- Standard Timer Card -->
+            <div id="timer-card" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center relative overflow-hidden">
+                
+                <div class="w-full flex items-center justify-between mb-4">
+                    <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">Lock / Idle Countdown</span>
+                    <span id="active-minutes-display" class="text-xs font-mono text-cyan-400 bg-cyan-950/50 px-2.5 py-1 rounded-lg border border-cyan-800/50">1.0 mins</span>
+                </div>
+
+                <!-- Big Countdown Clock -->
+                <div class="my-4 text-center">
+                    <div id="countdown-clock" class="text-6xl font-extrabold tracking-tighter text-white font-mono drop-shadow-md">
+                        01:00
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-slate-800 rounded-full h-2.5 mt-2 overflow-hidden border border-slate-700/50">
+                    <div id="timer-progress-bar" class="bg-gradient-to-r from-cyan-500 to-blue-600 h-2.5 rounded-full transition-all duration-300 w-0"></div>
+                </div>
+
+                <!-- Subtle Activity Hint -->
+                <div class="mt-4 flex items-center gap-1.5 text-xs text-slate-400 text-center">
+                    <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
+                    <span>Triggers if screen locks or turns off</span>
+                </div>
+            </div>
+
+            <!-- Settings / Duration Input Card -->
+            <div id="settings-card" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-3">
+                <label for="duration-input" class="text-xs font-semibold tracking-wider text-slate-400 uppercase flex justify-between items-center">
+                    <span>Alarm After Screen Off / Lock</span>
+                    <span class="text-[10px] text-slate-500">Default: 1 min (0.1 for ~6s test)</span>
+                </label>
+                <div class="flex gap-2">
+                    <div class="relative flex-1">
+                        <input type="number" id="duration-input" step="0.1" min="0.1" max="120" value="1" 
+                            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-lg focus:outline-none focus:border-cyan-500 transition-colors">
+                        <span class="absolute right-4 top-3.5 text-xs font-medium text-slate-400">Minutes</span>
+                    </div>
+                    <button id="apply-duration-btn" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 font-semibold text-xs px-4 rounded-xl text-slate-200 transition-colors">
+                        Set
+                    </button>
+                </div>
+
+                <!-- Quick Presets -->
+                <div class="grid grid-cols-4 gap-2 pt-1">
+                    <button class="preset-btn bg-slate-950/60 hover:bg-slate-800 border border-slate-800 text-xs py-2 rounded-lg text-slate-300 transition-colors" data-mins="0.1">0.1m</button>
+                    <button class="preset-btn bg-slate-950/60 hover:bg-slate-800 border border-slate-800 text-xs py-2 rounded-lg text-slate-300 transition-colors" data-mins="0.5">0.5m</button>
+                    <button class="preset-btn bg-slate-950/60 hover:bg-slate-800 border border-slate-800 text-xs py-2 rounded-lg text-slate-300 transition-colors" data-mins="1">1m</button>
+                    <button class="preset-btn bg-slate-950/60 hover:bg-slate-800 border border-slate-800 text-xs py-2 rounded-lg text-slate-300 transition-colors" data-mins="3">3m</button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Alarm Emergency Overlay Card (Hidden by default) -->
+        <div id="alarm-emergency-card" class="hidden bg-red-950/90 border-2 border-red-600 rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center gap-5 alarm-pulse">
+            <div class="w-16 h-16 bg-red-600 text-white rounded-full flex items-center justify-center text-3xl shadow-lg animate-bounce">
+                🚨
+            </div>
+            <div>
+                <h2 class="text-3xl font-black tracking-tight text-white mb-1">WAKE UP!</h2>
+                <p id="alarm-inactive-duration-text" class="text-sm text-red-200 font-medium">Your screen was locked or off too long.</p>
+            </div>
+            <button id="stop-alarm-btn" class="w-full bg-white hover:bg-red-50 text-red-700 active:scale-95 transition-transform font-black text-xl py-5 rounded-xl shadow-2xl border-4 border-red-500 uppercase tracking-wide flex items-center justify-center gap-2">
+                <span>🛑</span> I'M AWAKE / STOP ALARM
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Bottom Sticky Control Bar -->
+    <footer class="w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-4 sticky bottom-0 z-50">
+        <div class="max-w-md mx-auto">
+            <button id="main-control-btn" class="w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 active:scale-[0.98] transition-all text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-cyan-900/40 flex items-center justify-center gap-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+                <span id="main-control-text">ARM MONITOR</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Application Script -->
+    <script>
+        let appState = 'READY';
+
+        let durationMinutes = 1.0;
+        let totalDurationMs = 1 * 60 * 1000;
+        let remainingTimeMs = totalDurationMs;
+        let lastActivityTimestamp = Date.now();
+        let timerInterval = null;
+
+        let backgroundTimestamp = null;
+        let audioCtx = null;
+        let alarmIntervalId = null;
+
+        let deferredPrompt = null;
+        const installBtn = document.getElementById('install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.classList.remove('hidden');
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    installBtn.classList.add('hidden');
+                }
+                deferredPrompt = null;
+            }
+        });
+
+        const headerDot = document.getElementById('header-dot');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const statusDescription = document.getElementById('status-description');
+
+        const displayContainer = document.getElementById('display-container');
+        const timerCard = document.getElementById('timer-card');
+        const settingsCard = document.getElementById('settings-card');
+        const alarmEmergencyCard = document.getElementById('alarm-emergency-card');
+        const alarmInactiveDurationText = document.getElementById('alarm-inactive-duration-text');
+
+        const countdownClock = document.getElementById('countdown-clock');
+        const timerProgressBar = document.getElementById('timer-progress-bar');
+        const activeMinutesDisplay = document.getElementById('active-minutes-display');
+
+        const durationInput = document.getElementById('duration-input');
+        const applyDurationBtn = document.getElementById('apply-duration-btn');
+        const presetBtns = document.querySelectorAll('.preset-btn');
+
+        const mainControlBtn = document.getElementById('main-control-btn');
+        const mainControlText = document.getElementById('main-control-text');
+        const stopAlarmBtn = document.getElementById('stop-alarm-btn');
+
+        function updateDurationValue(mins) {
+            durationMinutes = Math.max(0.05, parseFloat(mins) || 1.0);
+            durationInput.value = durationMinutes;
+            totalDurationMs = durationMinutes * 60 * 1000;
+            remainingTimeMs = totalDurationMs;
+            activeMinutesDisplay.textContent = `${durationMinutes} mins`;
+            updateClockDisplay();
+            updateProgressBar(0);
+        }
+
+        applyDurationBtn.addEventListener('click', () => {
+            updateDurationValue(durationInput.value);
+            triggerActivity();
+        });
+
+        presetBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mins = btn.getAttribute('data-mins');
+                updateDurationValue(mins);
+                triggerActivity();
+            });
+        });
+
+        durationInput.addEventListener('change', () => {
+            updateDurationValue(durationInput.value);
+        });
+
+        function formatTime(ms) {
+            if (ms < 0) ms = 0;
+            const totalSecs = Math.ceil(ms / 1000);
+            const mins = Math.floor(totalSecs / 60);
+            const secs = totalSecs % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function updateClockDisplay() {
+            countdownClock.textContent = formatTime(remainingTimeMs);
+        }
+
+        function updateProgressBar(elapsedRatio) {
+            const pct = Math.min(100, Math.max(0, elapsedRatio * 100));
+            timerProgressBar.style.width = `${pct}%`;
+            
+            if (pct > 75) {
+                timerProgressBar.className = "bg-gradient-to-r from-amber-500 to-red-600 h-2.5 rounded-full transition-all duration-300";
+            } else {
+                timerProgressBar.className = "bg-gradient-to-r from-cyan-500 to-blue-600 h-2.5 rounded-full transition-all duration-300";
+            }
+        }
+
+        function setAppState(newState) {
+            appState = newState;
+            alarmEmergencyCard.classList.remove('alarm-pulse');
+
+            switch (appState) {
+                case 'READY':
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+                    statusText.textContent = "READY";
+                    statusDescription.textContent = "Arm monitor. If screen locks or goes off, alarm triggers!";
+                    
+                    mainControlText.textContent = "ARM MONITOR";
+                    mainControlBtn.className = "w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 active:scale-[0.98] transition-all text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-cyan-900/40 flex items-center justify-center gap-3";
+                    
+                    displayContainer.classList.remove('hidden');
+                    timerCard.classList.remove('opacity-50', 'pointer-events-none');
+                    settingsCard.classList.remove('opacity-50', 'pointer-events-none');
+                    alarmEmergencyCard.classList.add('hidden');
+                    
+                    headerDot.className = "inline-block w-3 h-3 rounded-full bg-slate-400";
+                    break;
+
+                case 'MONITORING':
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                    statusText.textContent = "MONITORING ACTIVE";
+                    statusDescription.textContent = "PWA lock tracking active. Alarm will sound if screen is off too long.";
+                    
+                    mainControlText.textContent = "DISARM";
+                    mainControlBtn.className = "w-full bg-slate-800 hover:bg-slate-700 active:bg-slate-600 active:scale-[0.98] border border-slate-700 transition-all text-slate-200 font-bold text-lg py-4 rounded-2xl shadow-lg flex items-center justify-center gap-3";
+                    
+                    displayContainer.classList.remove('hidden');
+                    timerCard.classList.remove('opacity-50', 'pointer-events-none');
+                    settingsCard.classList.add('opacity-50', 'pointer-events-none');
+                    alarmEmergencyCard.classList.add('hidden');
+                    
+                    headerDot.className = "inline-block w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+                    break;
+
+                case 'COUNTING DOWN':
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping";
+                    statusText.textContent = "NEAR TIMEOUT";
+                    statusDescription.textContent = "Approaching inactivity threshold! Touch screen or unlock.";
+                    
+                    mainControlText.textContent = "DISARM";
+                    mainControlBtn.className = "w-full bg-slate-800 hover:bg-slate-700 active:bg-slate-600 active:scale-[0.98] border border-slate-700 transition-all text-slate-200 font-bold text-lg py-4 rounded-2xl shadow-lg flex items-center justify-center gap-3";
+                    
+                    displayContainer.classList.remove('hidden');
+                    timerCard.classList.remove('opacity-50', 'pointer-events-none');
+                    settingsCard.classList.add('opacity-50', 'pointer-events-none');
+                    alarmEmergencyCard.classList.add('hidden');
+                    
+                    headerDot.className = "inline-block w-3 h-3 rounded-full bg-amber-500";
+                    break;
+
+                case 'ALARM BLARING':
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse";
+                    statusText.textContent = "ALARM BLARING";
+                    statusDescription.textContent = "Screen was off / locked for too long. Wake up!";
+                    
+                    displayContainer.classList.add('hidden');
+                    alarmEmergencyCard.classList.remove('hidden');
+                    alarmEmergencyCard.classList.add('alarm-pulse');
+                    alarmInactiveDurationText.textContent = `Your screen was off or locked for ${durationMinutes} minute(s).`;
+                    
+                    mainControlText.textContent = "DISARM MONITOR";
+                    headerDot.className = "inline-block w-3 h-3 rounded-full bg-red-600 animate-ping";
+                    break;
+            }
+        }
+
+        function handleScreenOffState() {
+            if (appState === 'MONITORING' || appState === 'COUNTING DOWN') {
+                backgroundTimestamp = Date.now();
+            }
+        }
+
+        function handleScreenOnState() {
+            if (appState === 'MONITORING' || appState === 'COUNTING DOWN') {
+                if (backgroundTimestamp) {
+                    const elapsedAway = Date.now() - backgroundTimestamp;
+                    lastActivityTimestamp += elapsedAway;
+                    backgroundTimestamp = null;
+
+                    const elapsed = Date.now() - lastActivityTimestamp;
+                    if (elapsed >= totalDurationMs) {
+                        remainingTimeMs = 0;
+                        setAppState('ALARM BLARING');
+                        startAlarmTone();
+                    }
+                }
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                handleScreenOffState();
+            } else if (document.visibilityState === 'visible') {
+                handleScreenOnState();
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            handleScreenOffState();
+        });
+
+        window.addEventListener('focus', () => {
+            handleScreenOnState();
+        });
+
+        function initAudioContext() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!audioCtx) {
+                    audioCtx = new AudioContext();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            } catch (e) {
+                console.warn("AudioContext init error:", e);
+            }
+        }
+
+        function startAlarmTone() {
+            try {
+                initAudioContext();
+                if (!audioCtx) return;
+
+                if (alarmIntervalId) clearInterval(alarmIntervalId);
+
+                let toneToggle = false;
+                const playBeep = () => {
+                    if (appState !== 'ALARM BLARING') return;
+                    try {
+                        const osc = audioCtx.createOscillator();
+                        const gainNode = audioCtx.createGain();
+
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(toneToggle ? 1650 : 1200, audioCtx.currentTime);
+                        toneToggle = !toneToggle;
+
+                        gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+
+                        osc.connect(gainNode);
+                        gainNode.connect(audioCtx.destination);
+
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.38);
+                    } catch (e) {
+                        console.warn("Audio play error:", e);
+                    }
+                };
+
+                playBeep();
+                alarmIntervalId = setInterval(playBeep, 450);
+            } catch (err) {
+                console.error("Web Audio API error:", err);
+            }
+        }
+
+        function stopAlarmTone() {
+            if (alarmIntervalId) {
+                clearInterval(alarmIntervalId);
+                alarmIntervalId = null;
+            }
+        }
+
+        function triggerActivity() {
+            if (appState === 'MONITORING' || appState === 'COUNTING DOWN') {
+                lastActivityTimestamp = Date.now();
+                remainingTimeMs = totalDurationMs;
+                updateClockDisplay();
+                updateProgressBar(0);
+                
+                if (appState === 'COUNTING DOWN') {
+                    setAppState('MONITORING');
+                }
+            }
+        }
+
+        ['touchstart', 'mousedown', 'scroll', 'keydown', 'mousemove', 'pointerdown'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                triggerActivity();
+            }, { passive: true });
+        });
+
+        function initTimerLoop() {
+            if (timerInterval) clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                if (appState === 'MONITORING' || appState === 'COUNTING DOWN') {
+                    const now = Date.now();
+                    const elapsed = now - lastActivityTimestamp;
+                    remainingTimeMs = Math.max(0, totalDurationMs - elapsed);
+
+                    const elapsedRatio = elapsed / totalDurationMs;
+                    updateClockDisplay();
+                    updateProgressBar(elapsedRatio);
+
+                    if (remainingTimeMs <= totalDurationMs * 0.3 && appState === 'MONITORING') {
+                        setAppState('COUNTING DOWN');
+                    }
+
+                    if (remainingTimeMs <= 0) {
+                        setAppState('ALARM BLARING');
+                        startAlarmTone();
+                    }
+                }
+            }, 100);
+        }
+
+        mainControlBtn.addEventListener('click', () => {
+            if (appState === 'READY') {
+                initAudioContext();
+                updateDurationValue(durationInput.value);
+                lastActivityTimestamp = Date.now();
+                remainingTimeMs = totalDurationMs;
+                setAppState('MONITORING');
+                initTimerLoop();
+            } else {
+                stopAlarmTone();
+                setAppState('READY');
+            }
+        });
+
+        stopAlarmBtn.addEventListener('click', () => {
+            stopAlarmTone();
+            lastActivityTimestamp = Date.now();
+            remainingTimeMs = totalDurationMs;
+            updateClockDisplay();
+            updateProgressBar(0);
+            setAppState('MONITORING');
+        });
+
+        updateDurationValue(durationInput.value);
+        setAppState('READY');
+        initTimerLoop();
+
+    </script>
+</body>
+</html>
