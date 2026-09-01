@@ -35,7 +35,7 @@
                 <span class="inline-block w-3 h-3 rounded-full bg-emerald-500" id="header-dot"></span>
                 Study Wake-Up Monitor
             </h1>
-            <p class="text-xs text-slate-400">Cross-App & Lock-Screen Tracker</p>
+            <p class="text-xs text-slate-400">Media-Aware & Lock Tracker</p>
         </div>
         <button id="install-btn" class="hidden bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-colors">
             Install App
@@ -55,7 +55,7 @@
                 </div>
             </div>
             <p id="status-description" class="text-sm text-slate-300 font-medium">
-                Arm monitor. Timer resets when returning or interacting. Rings only if timeout expires!
+                Arm monitor. Timer pauses if study media is playing or screen is actively touched.
             </p>
         </div>
 
@@ -87,7 +87,7 @@
                     <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Returning or interacting before timeout resets the timer to full.</span>
+                    <span>Use Split-Screen or play study media to prevent false alarms.</span>
                 </div>
             </div>
 
@@ -267,7 +267,7 @@
                 case 'READY':
                     statusDot.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
                     statusText.textContent = "READY";
-                    statusDescription.textContent = "Arm monitor. Timer resets when returning or interacting. Rings only if timeout expires!";
+                    statusDescription.textContent = "Arm monitor. Timer pauses if study media is playing or screen is touched.";
                     
                     mainControlText.textContent = "ARM MONITOR";
                     mainControlBtn.className = "w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 active:scale-[0.98] transition-all text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-cyan-900/40 flex items-center justify-center gap-3";
@@ -283,7 +283,7 @@
                 case 'MONITORING':
                     statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
                     statusText.textContent = "MONITORING ACTIVE";
-                    statusDescription.textContent = "Active. Any return or interaction resets timer back to full.";
+                    statusDescription.textContent = "Active. Touch or media playback resets the timer.";
                     
                     mainControlText.textContent = "DISARM";
                     mainControlBtn.className = "w-full bg-slate-800 hover:bg-slate-700 active:bg-slate-600 active:scale-[0.98] border border-slate-700 transition-all text-slate-200 font-bold text-lg py-4 rounded-2xl shadow-lg flex items-center justify-center gap-3";
@@ -329,7 +329,7 @@
             }, { passive: true });
         });
 
-        // Background Screen-Lock / Visibility Check & Automatic Reset on Return
+        // Background Screen-Lock / Visibility Check (Pauses if Media Session is active or user returns)
         let backgroundAwayTime = null;
 
         document.addEventListener('visibilitychange', () => {
@@ -341,12 +341,15 @@
                         const elapsedAway = Date.now() - backgroundAwayTime;
                         backgroundAwayTime = null;
 
-                        if (elapsedAway >= totalDurationMs) {
+                        // Check if media session playback is active
+                        const isMediaActive = navigator.mediaSession && navigator.mediaSession.playbackState === 'playing';
+
+                        if (!isMediaActive && elapsedAway >= totalDurationMs) {
                             remainingTimeMs = 0;
                             setAppState('ALARM BLARING');
                             startAlarmTone();
                         } else {
-                            // If returned before timeout expired, treat it as active work outside and reset timer back to full!
+                            // Reset timer back to full since user returned or media is active
                             triggerActivity();
                         }
                     }
@@ -413,6 +416,15 @@
 
             timerInterval = setInterval(() => {
                 if (appState === 'MONITORING') {
+                    // Pause timer if media session playback is active
+                    if (navigator.mediaSession && navigator.mediaSession.playbackState === 'playing') {
+                        lastActivityTimestamp = Date.now();
+                        remainingTimeMs = totalDurationMs;
+                        updateClockDisplay();
+                        updateProgressBar(0);
+                        return;
+                    }
+
                     const now = Date.now();
                     const elapsed = now - lastActivityTimestamp;
                     remainingTimeMs = Math.max(0, totalDurationMs - elapsed);
@@ -464,11 +476,15 @@
                 lastActivityTimestamp = parseInt(savedLast);
                 totalDurationMs = parseInt(savedDur);
                 const elapsedAway = Date.now() - lastActivityTimestamp;
-                if (elapsedAway >= totalDurationMs) {
+                
+                if (navigator.mediaSession && navigator.mediaSession.playbackState === 'playing') {
+                    triggerActivity();
+                    setAppState('MONITORING');
+                    initTimerLoop();
+                } else if (elapsedAway >= totalDurationMs) {
                     setAppState('ALARM BLARING');
                     startAlarmTone();
                 } else {
-                    // Reset to full upon reloading if within bounds
                     triggerActivity();
                     setAppState('MONITORING');
                     initTimerLoop();
