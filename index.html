@@ -35,7 +35,7 @@
                 <span class="inline-block w-3 h-3 rounded-full bg-emerald-500" id="header-dot"></span>
                 Study Wake-Up Monitor
             </h1>
-            <p class="text-xs text-slate-400">Lock-Screen & App-Switch Tracker</p>
+            <p class="text-xs text-slate-400">Cross-App & Lock-Screen Tracker</p>
         </div>
         <button id="install-btn" class="hidden bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition-colors">
             Install App
@@ -55,7 +55,7 @@
                 </div>
             </div>
             <p id="status-description" class="text-sm text-slate-300 font-medium">
-                Arm monitor, then switch to YouTube/Notes or lock screen. Alarm sounds if away too long!
+                Arm monitor. Timer resets when returning or interacting. Rings only if timeout expires!
             </p>
         </div>
 
@@ -66,7 +66,7 @@
             <div id="timer-card" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center relative overflow-hidden">
                 
                 <div class="w-full flex items-center justify-between mb-4">
-                    <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">Session / Lock Timeout</span>
+                    <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">Inactivity Countdown</span>
                     <span id="active-minutes-display" class="text-xs font-mono text-cyan-400 bg-cyan-950/50 px-2.5 py-1 rounded-lg border border-cyan-800/50">1.0 mins</span>
                 </div>
 
@@ -87,14 +87,14 @@
                     <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Switched to YouTube/Notes or locked? Timer counts in background.</span>
+                    <span>Returning or interacting before timeout resets the timer to full.</span>
                 </div>
             </div>
 
             <!-- Settings / Duration Input Card -->
             <div id="settings-card" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-3">
                 <label for="duration-input" class="text-xs font-semibold tracking-wider text-slate-400 uppercase flex justify-between items-center">
-                    <span>Alarm After Screen Off / App Switch</span>
+                    <span>Alarm After Inactivity / Lock</span>
                     <span class="text-[10px] text-slate-500">Default: 1 min (0.1 for ~6s test)</span>
                 </label>
                 <div class="flex gap-2">
@@ -126,7 +126,7 @@
             </div>
             <div>
                 <h2 class="text-3xl font-black tracking-tight text-white mb-1">WAKE UP!</h2>
-                <p id="alarm-inactive-duration-text" class="text-sm text-red-200 font-medium">You were away or locked out too long.</p>
+                <p id="alarm-inactive-duration-text" class="text-sm text-red-200 font-medium">You were inactive or locked out too long.</p>
             </div>
             <button id="stop-alarm-btn" class="w-full bg-white hover:bg-red-50 text-red-700 active:scale-95 transition-transform font-black text-xl py-5 rounded-xl shadow-2xl border-4 border-red-500 uppercase tracking-wide flex items-center justify-center gap-2">
                 <span>🛑</span> I'M AWAKE / STOP ALARM
@@ -149,11 +149,9 @@
 
     <!-- Application Script -->
     <script>
-        // Register Service Worker for PWA Install Prompt
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('ServiceWorker registered:', reg.scope))
                     .catch(err => console.log('ServiceWorker registration failed:', err));
             });
         }
@@ -162,7 +160,7 @@
         let durationMinutes = 1.0;
         let totalDurationMs = 1 * 60 * 1000;
         let remainingTimeMs = totalDurationMs;
-        let sessionStartTime = null;
+        let lastActivityTimestamp = Date.now();
         let timerInterval = null;
 
         let audioCtx = null;
@@ -223,22 +221,14 @@
 
         applyDurationBtn.addEventListener('click', () => {
             updateDurationValue(durationInput.value);
-            if (appState === 'MONITORING') {
-                sessionStartTime = Date.now();
-                localStorage.setItem('study_session_start', sessionStartTime);
-                localStorage.setItem('study_duration_ms', totalDurationMs);
-            }
+            triggerActivity();
         });
 
         presetBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const mins = btn.getAttribute('data-mins');
                 updateDurationValue(mins);
-                if (appState === 'MONITORING') {
-                    sessionStartTime = Date.now();
-                    localStorage.setItem('study_session_start', sessionStartTime);
-                    localStorage.setItem('study_duration_ms', totalDurationMs);
-                }
+                triggerActivity();
             });
         });
 
@@ -277,7 +267,7 @@
                 case 'READY':
                     statusDot.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
                     statusText.textContent = "READY";
-                    statusDescription.textContent = "Arm monitor, then switch to YouTube/Notes or lock screen.";
+                    statusDescription.textContent = "Arm monitor. Timer resets when returning or interacting. Rings only if timeout expires!";
                     
                     mainControlText.textContent = "ARM MONITOR";
                     mainControlBtn.className = "w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 active:scale-[0.98] transition-all text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-cyan-900/40 flex items-center justify-center gap-3";
@@ -292,8 +282,8 @@
 
                 case 'MONITORING':
                     statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
-                    statusText.textContent = "TRACKING ACTIVE";
-                    statusDescription.textContent = "You can now switch to YouTube, Notes, or lock your screen!";
+                    statusText.textContent = "MONITORING ACTIVE";
+                    statusDescription.textContent = "Active. Any return or interaction resets timer back to full.";
                     
                     mainControlText.textContent = "DISARM";
                     mainControlBtn.className = "w-full bg-slate-800 hover:bg-slate-700 active:bg-slate-600 active:scale-[0.98] border border-slate-700 transition-all text-slate-200 font-bold text-lg py-4 rounded-2xl shadow-lg flex items-center justify-center gap-3";
@@ -309,12 +299,12 @@
                 case 'ALARM BLARING':
                     statusDot.className = "w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse";
                     statusText.textContent = "ALARM BLARING";
-                    statusDescription.textContent = "You were away in other apps or locked out too long. Wake up!";
+                    statusDescription.textContent = "Screen was locked or inactive too long. Wake up!";
                     
                     displayContainer.classList.add('hidden');
                     alarmEmergencyCard.classList.remove('hidden');
                     alarmEmergencyCard.classList.add('alarm-pulse');
-                    alarmInactiveDurationText.textContent = `You exceeded your ${durationMinutes} min limit away/locked.`;
+                    alarmInactiveDurationText.textContent = `You were idle or locked out for ${durationMinutes} min(s).`;
                     
                     mainControlText.textContent = "DISARM MONITOR";
                     headerDot.className = "inline-block w-3 h-3 rounded-full bg-red-600 animate-ping";
@@ -322,71 +312,53 @@
             }
         }
 
-        // Check elapsed time when returning from screen lock or YouTube/Notes app switch
-        function checkBackgroundTimeout() {
-            const savedStart = localStorage.getItem('study_session_start');
-            const savedDuration = localStorage.getItem('study_duration_ms');
-            const isArmed = localStorage.getItem('study_is_armed') === 'true';
-
-            if (isArmed && savedStart && savedDuration) {
-                sessionStartTime = parseInt(savedStart);
-                totalDurationMs = parseInt(savedDuration);
-                appState = 'MONITORING';
-
-                const elapsed = Date.now() - sessionStartTime;
-                if (elapsed >= totalDurationMs) {
-                    remainingTimeMs = 0;
-                    setAppState('ALARM BLARING');
-                    startAlarmTone();
-                } else {
-                    remainingTimeMs = totalDurationMs - elapsed;
-                    setAppState('MONITORING');
-                    initTimerLoop();
-                }
-            }
-        }
-
-        // Save state to localStorage when leaving app or locking screen
-        function handleAppBackgrounded() {
+        // Trigger Activity Resets Timer to Full
+        function triggerActivity() {
             if (appState === 'MONITORING') {
-                localStorage.setItem('study_is_armed', 'true');
-                localStorage.setItem('study_session_start', sessionStartTime);
-                localStorage.setItem('study_duration_ms', totalDurationMs);
+                lastActivityTimestamp = Date.now();
+                remainingTimeMs = totalDurationMs;
+                updateClockDisplay();
+                updateProgressBar(0);
+                localStorage.setItem('study_last_activity', lastActivityTimestamp);
             }
         }
 
-        // Check timeout immediately when screen turns back on or app is reopened
-        function handleAppForegrounded() {
-            if (appState === 'MONITORING' || localStorage.getItem('study_is_armed') === 'true') {
-                checkBackgroundTimeout();
-            }
-        }
+        ['touchstart', 'mousedown', 'scroll', 'keydown', 'mousemove', 'pointerdown'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                triggerActivity();
+            }, { passive: true });
+        });
+
+        // Background Screen-Lock / Visibility Check & Automatic Reset on Return
+        let backgroundAwayTime = null;
 
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                handleAppBackgrounded();
-            } else if (document.visibilityState === 'visible') {
-                handleAppForegrounded();
+            if (appState === 'MONITORING') {
+                if (document.visibilityState === 'hidden') {
+                    backgroundAwayTime = Date.now();
+                } else if (document.visibilityState === 'visible') {
+                    if (backgroundAwayTime) {
+                        const elapsedAway = Date.now() - backgroundAwayTime;
+                        backgroundAwayTime = null;
+
+                        if (elapsedAway >= totalDurationMs) {
+                            remainingTimeMs = 0;
+                            setAppState('ALARM BLARING');
+                            startAlarmTone();
+                        } else {
+                            // If returned before timeout expired, treat it as active work outside and reset timer back to full!
+                            triggerActivity();
+                        }
+                    }
+                }
             }
-        });
-
-        window.addEventListener('blur', () => {
-            handleAppBackgrounded();
-        });
-
-        window.addEventListener('focus', () => {
-            handleAppForegrounded();
         });
 
         function initAudioContext() {
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!audioCtx) {
-                    audioCtx = new AudioContext();
-                }
-                if (audioCtx.state === 'suspended') {
-                    audioCtx.resume();
-                }
+                if (!audioCtx) audioCtx = new AudioContext();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
             } catch (e) {
                 console.warn("AudioContext init error:", e);
             }
@@ -396,7 +368,6 @@
             try {
                 initAudioContext();
                 if (!audioCtx) return;
-
                 if (alarmIntervalId) clearInterval(alarmIntervalId);
 
                 let toneToggle = false;
@@ -443,7 +414,7 @@
             timerInterval = setInterval(() => {
                 if (appState === 'MONITORING') {
                     const now = Date.now();
-                    const elapsed = now - sessionStartTime;
+                    const elapsed = now - lastActivityTimestamp;
                     remainingTimeMs = Math.max(0, totalDurationMs - elapsed);
 
                     const elapsedRatio = elapsed / totalDurationMs;
@@ -463,12 +434,11 @@
             if (appState === 'READY') {
                 initAudioContext();
                 updateDurationValue(durationInput.value);
-                sessionStartTime = Date.now();
+                lastActivityTimestamp = Date.now();
                 remainingTimeMs = totalDurationMs;
                 
-                // Save to localStorage so background lock detection works across app suspension
                 localStorage.setItem('study_is_armed', 'true');
-                localStorage.setItem('study_session_start', sessionStartTime);
+                localStorage.setItem('study_last_activity', lastActivityTimestamp);
                 localStorage.setItem('study_duration_ms', totalDurationMs);
 
                 setAppState('MONITORING');
@@ -476,32 +446,39 @@
             } else {
                 stopAlarmTone();
                 localStorage.removeItem('study_is_armed');
-                localStorage.removeItem('study_session_start');
                 setAppState('READY');
             }
         });
 
         stopAlarmBtn.addEventListener('click', () => {
             stopAlarmTone();
-            sessionStartTime = Date.now();
-            remainingTimeMs = totalDurationMs;
-            
-            localStorage.setItem('study_is_armed', 'true');
-            localStorage.setItem('study_session_start', sessionStartTime);
-            
-            updateClockDisplay();
-            updateProgressBar(0);
+            triggerActivity();
             setAppState('MONITORING');
         });
 
-        // On load, check if session was active before screen locked
         updateDurationValue(durationInput.value);
         if (localStorage.getItem('study_is_armed') === 'true') {
-            checkBackgroundTimeout();
+            const savedLast = localStorage.getItem('study_last_activity');
+            const savedDur = localStorage.getItem('study_duration_ms');
+            if (savedLast && savedDur) {
+                lastActivityTimestamp = parseInt(savedLast);
+                totalDurationMs = parseInt(savedDur);
+                const elapsedAway = Date.now() - lastActivityTimestamp;
+                if (elapsedAway >= totalDurationMs) {
+                    setAppState('ALARM BLARING');
+                    startAlarmTone();
+                } else {
+                    // Reset to full upon reloading if within bounds
+                    triggerActivity();
+                    setAppState('MONITORING');
+                    initTimerLoop();
+                }
+            } else {
+                setAppState('READY');
+            }
         } else {
             setAppState('READY');
         }
-        initTimerLoop();
 
     </script>
 </body>
