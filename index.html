@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -150,15 +149,22 @@
 
     <!-- Application Script -->
     <script>
-        let appState = 'READY';
+        // Register Service Worker for PWA Install Prompt
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('ServiceWorker registered:', reg.scope))
+                    .catch(err => console.log('ServiceWorker registration failed:', err));
+            });
+        }
 
+        let appState = 'READY';
         let durationMinutes = 1.0;
         let totalDurationMs = 1 * 60 * 1000;
         let remainingTimeMs = totalDurationMs;
         let sessionStartTime = null;
         let timerInterval = null;
 
-        let backgroundTimestamp = null;
         let audioCtx = null;
         let alarmIntervalId = null;
 
@@ -219,6 +225,8 @@
             updateDurationValue(durationInput.value);
             if (appState === 'MONITORING') {
                 sessionStartTime = Date.now();
+                localStorage.setItem('study_session_start', sessionStartTime);
+                localStorage.setItem('study_duration_ms', totalDurationMs);
             }
         });
 
@@ -228,6 +236,8 @@
                 updateDurationValue(mins);
                 if (appState === 'MONITORING') {
                     sessionStartTime = Date.now();
+                    localStorage.setItem('study_session_start', sessionStartTime);
+                    localStorage.setItem('study_duration_ms', totalDurationMs);
                 }
             });
         });
@@ -312,33 +322,43 @@
             }
         }
 
-        // Handle App Leaving / Screen Locking / Switching to YouTube or Notes
-        function handleAppBackgrounded() {
-            if (appState === 'MONITORING') {
-                backgroundTimestamp = Date.now();
+        // Check elapsed time when returning from screen lock or YouTube/Notes app switch
+        function checkBackgroundTimeout() {
+            const savedStart = localStorage.getItem('study_session_start');
+            const savedDuration = localStorage.getItem('study_duration_ms');
+            const isArmed = localStorage.getItem('study_is_armed') === 'true';
+
+            if (isArmed && savedStart && savedDuration) {
+                sessionStartTime = parseInt(savedStart);
+                totalDurationMs = parseInt(savedDuration);
+                appState = 'MONITORING';
+
+                const elapsed = Date.now() - sessionStartTime;
+                if (elapsed >= totalDurationMs) {
+                    remainingTimeMs = 0;
+                    setAppState('ALARM BLARING');
+                    startAlarmTone();
+                } else {
+                    remainingTimeMs = totalDurationMs - elapsed;
+                    setAppState('MONITORING');
+                    initTimerLoop();
+                }
             }
         }
 
-        // Handle Returning to App or Unlocking Screen
-        function handleAppForegrounded() {
+        // Save state to localStorage when leaving app or locking screen
+        function handleAppBackgrounded() {
             if (appState === 'MONITORING') {
-                if (backgroundTimestamp) {
-                    const elapsedAway = Date.now() - backgroundTimestamp;
-                    backgroundTimestamp = null;
+                localStorage.setItem('study_is_armed', 'true');
+                localStorage.setItem('study_session_start', sessionStartTime);
+                localStorage.setItem('study_duration_ms', totalDurationMs);
+            }
+        }
 
-                    // Check total elapsed time since session start or away duration
-                    const totalElapsed = Date.now() - sessionStartTime;
-                    
-                    if (totalElapsed >= totalDurationMs || elapsedAway >= totalDurationMs) {
-                        remainingTimeMs = 0;
-                        setAppState('ALARM BLARING');
-                        startAlarmTone();
-                    } else {
-                        remainingTimeMs = totalDurationMs - totalElapsed;
-                        updateClockDisplay();
-                        updateProgressBar(totalElapsed / totalDurationMs);
-                    }
-                }
+        // Check timeout immediately when screen turns back on or app is reopened
+        function handleAppForegrounded() {
+            if (appState === 'MONITORING' || localStorage.getItem('study_is_armed') === 'true') {
+                checkBackgroundTimeout();
             }
         }
 
@@ -417,7 +437,6 @@
             }
         }
 
-        // Timer Loop for when user stays inside app
         function initTimerLoop() {
             if (timerInterval) clearInterval(timerInterval);
 
@@ -433,6 +452,7 @@
 
                     if (remainingTimeMs <= 0) {
                         setAppState('ALARM BLARING');
+                        localStorage.removeItem('study_is_armed');
                         startAlarmTone();
                     }
                 }
@@ -445,10 +465,18 @@
                 updateDurationValue(durationInput.value);
                 sessionStartTime = Date.now();
                 remainingTimeMs = totalDurationMs;
+                
+                // Save to localStorage so background lock detection works across app suspension
+                localStorage.setItem('study_is_armed', 'true');
+                localStorage.setItem('study_session_start', sessionStartTime);
+                localStorage.setItem('study_duration_ms', totalDurationMs);
+
                 setAppState('MONITORING');
                 initTimerLoop();
             } else {
                 stopAlarmTone();
+                localStorage.removeItem('study_is_armed');
+                localStorage.removeItem('study_session_start');
                 setAppState('READY');
             }
         });
@@ -457,16 +485,24 @@
             stopAlarmTone();
             sessionStartTime = Date.now();
             remainingTimeMs = totalDurationMs;
+            
+            localStorage.setItem('study_is_armed', 'true');
+            localStorage.setItem('study_session_start', sessionStartTime);
+            
             updateClockDisplay();
             updateProgressBar(0);
             setAppState('MONITORING');
         });
 
+        // On load, check if session was active before screen locked
         updateDurationValue(durationInput.value);
-        setAppState('READY');
+        if (localStorage.getItem('study_is_armed') === 'true') {
+            checkBackgroundTimeout();
+        } else {
+            setAppState('READY');
+        }
         initTimerLoop();
 
     </script>
 </body>
 </html>
-```
